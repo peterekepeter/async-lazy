@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <Authors>Péter Eke</Authors>
+    <Company />
+    <Description>Library of useful generic classes for your C# adventures such as: AsyncLazy, Once.</Description>
+  </PropertyGroup>
+
+</Project>
