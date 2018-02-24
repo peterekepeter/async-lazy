@@ -4,7 +4,10 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <Authors>Péter Eke</Authors>
     <Company />
-    <Description>Library of useful generic classes for your C# adventures such as: AsyncLazy, Once.</Description>
+    <Description>Library of useful generic classes for your C# adventures such as: AsyncLazy.</Description>
+    <RepositoryUrl>https://github.com/peterekepeter/async-lazy</RepositoryUrl>
+    <PackageReleaseNotes>The library is still work in progress, but the current functionality is under tests and works pretty well.</PackageReleaseNotes>
+    <Version>1.1.3</Version>
   </PropertyGroup>
 
 </Project>
