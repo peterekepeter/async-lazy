@@ -1,66 +1,57 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AsyncLazy
 {
-    /// <summary> Provides lazy instantion, good for singleton. </summary>
-    public class Lazy<Typename>
+    /// <summary>
+    /// An alias for AsynLazy, so that people can use it as a drop in replacement for Lazy.
+    /// Recommended to use AsyncLazy instead to be more specific, and not to mistake with regular Lazy.
+    /// </summary>
+    public class Lazy<Typename> : AsyncLazy<Typename>
     {
-        private Func<Typename> _factory;
-        private Func<Task<Typename>> _asyncFactory;
-        private Typename _value;
-        private bool _isValueCreated; 
-
-        public Lazy(Func<Typename> factory)
+        public Lazy(Func<Typename> factory) : base(factory)
         {
-            _factory = factory;
         }
 
-        public Lazy(Func<Task<Typename>> factory)
+        public Lazy(Func<Task<Typename>> factory) : base(factory)
         {
-            _asyncFactory = factory;
         }
-        
-        public Typename Value
+    }
+
+    /// <summary>
+    /// An alias for Once, because lazy with return values is basically that. It also adats the Once interface to Lazy's interface.
+    /// Recommended to use Once instead to be more specific.
+    /// </summary>
+    public class Lazy : Once
+    {
+        public Lazy()
+        {
+        }
+
+        public Lazy(Action action) : base(action)
+        {
+        }
+
+        public Lazy(Func<Task> action) : base(action)
+        {
+        }
+
+        public Boolean Value
         {
             get
             {
-                // shortcut
-                if (_isValueCreated) return _value; 
-                // if we're here there is no valie.. yet
-                if (_factory != null)
-                {
-                    _value = _factory();
-                }
-                if (_asyncFactory != null)
-                {
-                    // yes this blocks the thread, you called the sync version
-                    _value = _asyncFactory().Result;
-                }
-                _isValueCreated = true;
-                return _value;
+                Run();
+                return true;
             }
         }
 
-        public async Task<Typename> GetValueAsync()
+        public async Task<Boolean> GetValueAsync()
         {
-            // shortcut
-            if (_isValueCreated) return _value;
-            // if we're here there is no valie.. yet
-            if (_factory != null)
-            {
-                _value = _factory();
-            }
-            if (_asyncFactory != null)
-            {
-                // magic, non blocking way of using this
-                _value = await _asyncFactory();
-            }
-            _isValueCreated = true;
-            return _value;
+            await RunAsync();
+            return true;
         }
 
-        /// <summary> Set if the factory has been called, if set the factory is never called again. </summary>
-        public bool IsValueCreated => _isValueCreated;
+        public bool IsValueCreated => DidItRun;
     }
 }

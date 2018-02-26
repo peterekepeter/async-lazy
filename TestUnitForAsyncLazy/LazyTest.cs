@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Threading;
 using AsyncLazy;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -8,59 +10,28 @@ namespace TestUnitForAsyncLazy
     [TestClass]
     public class LazyTest
     {
-        [TestMethod]
-        public void CanGetValueOfLazy() 
-            => new Lazy<int>(() => 42).Value.Should().Be(42);
 
         [TestMethod]
-        public void FactoryIsOnlyCalledOnce()
+        public void LazyIsAliasForAsyncLazy()
         {
-            int callCount = 0;
-            var lazy = new Lazy<int>(() =>
-            {
-                callCount++;
-                return 42;
-            });
-            callCount.Should().Be(0);
-            lazy.Value.Should().Be(42);
-            callCount.Should().Be(1);
-            lazy.Value.Should().Be(42);
-            callCount.Should().Be(1);
-        }
-
-        [TestMethod]
-        public void AsyncFactoryAlsoWorks()
-            => new Lazy<int>(async () =>
-            {
-                await Task.Delay(10);
-                return 42;
-            })
-            .Value.Should().Be(42);
-
-        [TestMethod]
-        public void IsValueCreatedIsTrueAfterFactoryIsCalled()
-        {
-            var lazy = new Lazy<int>(() => 42);
+            var lazy = new AsyncLazy<int>(() => 42);
             lazy.IsValueCreated.Should().BeFalse();
             var value = lazy.Value; // calls the factory
             lazy.IsValueCreated.Should().BeTrue();
         }
 
         [TestMethod]
-        public async Task NonBlockingGetValueWorkWithNormalFactory()
+        public void CanRunActionsAsWell()
         {
-            var lazy = new Lazy<int>(() => 42);
-            var value = await lazy.GetValueAsync();
-            value.Should().Be(42);
-        }
-
-
-        [TestMethod]
-        public async Task NonBlockingGetValueWorkWithAsyncFactory()
-        {
-            var lazy = new Lazy<int>(async () => { await Task.Delay(10); return 42; });
-            var value = await lazy.GetValueAsync();
-            value.Should().Be(42);
+            int sideEffect = 0;
+            var lazy = new Lazy(() =>
+            {
+                sideEffect = 42;
+            });
+            lazy.IsValueCreated.Should().BeFalse();
+            var value = lazy.Value; // calls the factory
+            lazy.IsValueCreated.Should().BeTrue();
+            sideEffect.Should().Be(42);
         }
     }
 }
