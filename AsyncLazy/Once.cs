@@ -8,112 +8,96 @@ namespace AsyncLazy
 {
     /// <summary>
     /// Runs an action only once, it's like Lazy without return.
+    /// It can optionally have a predicate that determines if it needs to be run,
+    /// After running its assumed that the predicate will return false.
     /// </summary>
     public class Once
     {
-        private Action _action;
-        private Func<Task> _asyncAction;
-        private bool _didItRun;
-        private SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        private readonly Func<Boolean> _shouldRun;
+        private readonly Action _action;
+        private readonly Func<Task> _asyncAction;
+        private Int32 _ranCount = 0;
+        private readonly AsyncLock _lock = new AsyncLock();
 
         /// <summary>
         /// Instantiates once, but is expecting action at a later point
         /// </summary>
-        public Once()
-        {
-        }
+        public Once() => _shouldRun = () => DidItRun == false;
 
         /// <summary>
         /// Prepare Once with an action.
         /// </summary>
-        public Once(Action action)
-        {
-            _action = action;
-        }
+        public Once(Action action) : this() => _action = action;
 
         /// <summary>
         /// Prepare once with an async action
         /// </summary>
-        public Once(Func<Task> action)
-        {
-            _asyncAction = action;
-        }
+        public Once(Func<Task> action) : this() => _asyncAction = action;
         
+        /// <summary>
+        /// Prepare once with a should run predicate and action.
+        /// </summary>
+        public Once(Func<Boolean> shouldRun, Action action) : this(action) => _shouldRun = shouldRun;
+
+        /// <summary>
+        /// Prepare once with a should run predicate and an async action.
+        /// </summary>
+        public Once(Func<Boolean> shouldRun, Func<Task> action) : this(action) => _shouldRun = shouldRun;
+
         public void Run()
         {
             // shortcut
-            if (_didItRun) return;
-            // if we're here there is no value.. yet, synchronize!
-            var semaphore = _semaphore;
-            try
+            if (_shouldRun() == false) return;
+            _lock.Run(() =>
             {
-                semaphore.Wait();
-                // check again, maybe it was created
-                if (_didItRun) return;
-                // sync factory
+                // check again after syncronization
+                if (_shouldRun() == false) return;
+                // prefer sync acton
                 if (_action != null)
                 {
                     _action();
-                    // destroy fields that are not needed anymore
-                    _action = null;
                 }
-                // async factory
-                if (_asyncAction != null)
+                else if (_asyncAction != null)
                 {
                     // yes this blocks the thread, you called the sync version
                     // but it does it on a background thread
-                     Task.Run(async () =>
-                     {
-                         await _asyncAction();
-                     }).Wait();
-                    // destroy fields that are not needed anymore
-                    _asyncAction = null;
+                    Task.Run(async () =>
+                    {
+                        await _asyncAction();
+                    }).Wait();
                 }
-                _didItRun = true;
-                // destroy fields that are not needed anymore
-                _semaphore = null;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
+                _ranCount++;
+            });
         }
 
         public async Task RunAsync()
         {
             // shortcut
-            if (_didItRun) return;
-            // if we're here there is no valie.. yet
-            var semaphore = _semaphore;
-            try
+            if (_shouldRun() == false) return;
+            await _lock.RunAsync(async () =>
             {
-                semaphore.Wait();
                 // check again, maybe it was created
-                if (_didItRun) return;
-                if (_action != null)
-                {
-                    _action();
-                    // destroy fields that are not needed anymore
-                    _action = null;
-                }
+                if (_shouldRun() == false) return;
+                // prefer asnyc acyion
                 if (_asyncAction != null)
                 {
                     // magic, non blocking way of using this
                     await _asyncAction();
-                    // destroy fields that are not needed anymore
-                    _asyncAction = null;
                 }
-                _didItRun = true;
-                // destroy fields that are not needed anymore
-                _semaphore = null;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
+                else if (_action != null)
+                {
+                    _action();
+                }
+                _ranCount++;
+            });
         }
 
         /// <summary> Set if the factory has been called, if set the factory is never called again. </summary>
-        public bool DidItRun => _didItRun;
+        public bool DidItRun => _ranCount > 0;
+
+        /// <summary>
+        /// The number of times the action ran.
+        /// </summary>
+        public int RanCount => _ranCount;
     }
 }

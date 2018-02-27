@@ -4,12 +4,13 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <Authors>Péter Eke</Authors>
     <Company />
-    <Description>Lazy execution for your C# adventures! Contains classes like AsyncLazy and Once.</Description>
+    <Description>Lazy execution for your C# adventures! Contains classes like AsyncLazy, Once, AsyncCache and AsyncLock.</Description>
     <RepositoryUrl>https://github.com/peterekepeter/async-lazy</RepositoryUrl>
-    <PackageReleaseNotes>Since Async lazy will most probably be used in multithreaded contexts, now there is a semaphore in the implementation so that the resource is only initialized once.</PackageReleaseNotes>
-    <Version>1.2.0</Version>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
-    <FileVersion>1.2.0.0</FileVersion>
+    <PackageReleaseNotes>Added implementation for  a new AsyncCache that will allow high performance multi threaded caching. Once supports a predicate that allows once to be re-run based on the predicate result. Cleaned up the implementation for better code reuse.</PackageReleaseNotes>
+    <Version>1.3.0</Version>
+    <AssemblyVersion>1.3.0.0</AssemblyVersion>
+    <FileVersion>1.3.0.0</FileVersion>
+    <PackageTags>AsyncLazy AsyncLock Cache</PackageTags>
   </PropertyGroup>
 
 </Project>

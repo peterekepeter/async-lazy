@@ -11,7 +11,7 @@ namespace AsyncLazy
         private Func<Task<Typename>> _asyncFactory;
         private Typename _value;
         private bool _isValueCreated;
-        private SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
+        private readonly AsyncLock _lock = new AsyncLock();
 
         /// <summary>
         /// Create with regular factory.
@@ -42,12 +42,10 @@ namespace AsyncLazy
             // shortcut
             if (_isValueCreated) return _value;
             // if we're here there is no value.. yet, synchronize!
-            var semaphore = _semaphore;
-            try
+            _lock.Run(()=>
             {
-                semaphore.Wait();
                 // check again, maybe it was created
-                if (_isValueCreated) return _value;
+                if (_isValueCreated) return;
                 // sync factory
                 if (_factory != null)
                 {
@@ -65,14 +63,8 @@ namespace AsyncLazy
                     _asyncFactory = null;
                 }
                 _isValueCreated = true;
-                // destroy fields that are not needed anymore
-                _semaphore = null;
-                return _value;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
+            });
+            return _value;
         }
 
         /// <summary>
@@ -83,12 +75,10 @@ namespace AsyncLazy
             // shortcut
             if (_isValueCreated) return _value;
             // if we're here there is no valie.. yet
-            var semaphore = _semaphore;
-            try
+            await _lock.RunAsync(async () =>
             {
-                semaphore.Wait();
                 // check again, maybe it was created
-                if (_isValueCreated) return _value;
+                if (_isValueCreated) return;
                 if (_factory != null)
                 {
                     _value = _factory();
@@ -103,14 +93,8 @@ namespace AsyncLazy
                     _asyncFactory = null;
                 }
                 _isValueCreated = true;
-                // destroy fields that are not needed anymore
-                _semaphore = null;
-                return _value;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
+            });
+            return _value;
         }
 
         /// <summary> 
