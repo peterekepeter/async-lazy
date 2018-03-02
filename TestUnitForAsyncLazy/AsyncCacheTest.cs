@@ -148,5 +148,53 @@ namespace TestUnitForAsyncLazy
             threadActive = false;
             thread.Join();
         }
+
+
+        [TestMethod]
+        public void CanRegisterDefaultOptions()
+        {
+            var count = 0;
+            var cache = new AsyncCache<int, int>(x => x * x);
+            var options = new CacheCallOptions
+            {
+                CacheMissAction = () =>
+                {
+                    count++;
+                }
+            };
+            cache.DefaultCacheCallOptions = options;
+            cache.GetValue(3);
+            count.Should().Be(1);
+        }
+
+        [TestMethod]
+        public async Task CanAddOptionsToEachRequest()
+        {
+            var count = 0;
+            var cache = new AsyncCache<int, int>(x => x * x);
+            var options = new CacheCallOptions
+            {
+                CacheMissAction = () =>
+                {
+                    count++;
+                }
+            };
+            cache.GetValue(3, options); // call should miss
+            await cache.GetValueAsync(3, options); // call should hit
+            count.Should().Be(1);
+        }
+
+        [TestMethod]
+        public async Task CacheMissActionCanDenyFactoryCall()
+        {
+            var cache = new AsyncCache<int, int>(x => x * x);
+            var options = new CacheCallOptions();
+            options.CacheMissAction = () =>
+            {
+                options.DontCallFactory = true;
+            };
+            cache.GetValue(3, options).Should().Be(0);
+            (await cache.GetValueAsync(3, options)).Should().Be(0);
+        }
     }
 }

@@ -31,6 +31,7 @@ namespace AsyncLazy
         private TimeSpan _purgeEvery = new TimeSpan(0, 5, 0);
         private Int32 _itemLimit = 1000;
         private Int32 _hotItemCount = 0;
+        private CacheCallOptions _defaultCacheCallOptions;
 
         /// <summary>
         /// You must set either Factory or AsyncFactory after initializing with default constructor before usage.
@@ -42,6 +43,7 @@ namespace AsyncLazy
             _warmBucket = _coldBucket = builder.ToImmutable();
             _lastOptimization = _lastPurge = DateTime.Now;
             _hotItemCount = 0;
+            _defaultCacheCallOptions = CacheCallOptions.GetDefaultOptions();
             _cleanupProcess = new Once(() =>
             {
                 var now = DateTime.Now;
@@ -106,33 +108,53 @@ namespace AsyncLazy
         }
 
 
-        /// <summary>
-        /// By deafult 1000, sets the maximum items that can be kept in a bucket. The cache may hold more items, but this is the mimimum it will.
-        /// </summary>
+        /// <summary> By deafult 1000, sets the maximum items that can be kept in a bucket. The cache may hold more items, but this is the mimimum it will. </summary>
         public int ItemLimit
         {
             get { return _itemLimit; }
             set { _itemLimit = value; }
         }
 
-        /// <summary>
-        /// If value has been created it's returned immediately, otherwise the factory is called.
-        /// </summary>
+
+        /// <summary> The default cache call options, used in all requests that dont explicityle specify the options. Cannot be set to null, when attempting to set to null it will default to CacheCallOptions.GetDefaultOptions() </summary>
+        public CacheCallOptions DefaultCacheCallOptions
+        {
+            set => _defaultCacheCallOptions = value ?? CacheCallOptions.GetDefaultOptions();
+            get => _defaultCacheCallOptions;
+        }
+
+        /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
         public TValue GetValue(TKey key)
         {
             Task cleanupTask = AutomaticCleanup ? Task.Run(async () => await CleanupAsync()) : null;
-            var result = ActuallyGetValueOrCallFactory(key);
+            var result = ActuallyGetValueOrCallFactory(key, _defaultCacheCallOptions);
             cleanupTask?.Wait();
             return result;
         }
 
-        /// <summary>
-        /// If value has been created it's returned immediately, otherwise the factory is called, all this in a non blocking way.
-        /// </summary>
+        /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
+        public TValue GetValue(TKey key, CacheCallOptions options) 
+        {
+            Task cleanupTask = AutomaticCleanup ? Task.Run(async () => await CleanupAsync()) : null;
+            var result = ActuallyGetValueOrCallFactory(key, options);
+            cleanupTask?.Wait();
+            return result;
+        }
+        
+        /// <summary> If value has been created it's returned immediately, otherwise the factory is called, all this in a non blocking way. </summary>
         public async Task<TValue> GetValueAsync(TKey key)
         {
             Task cleanupTask = AutomaticCleanup ? CleanupAsync() : null;
-            var result = ActuallyGetValueOrCallFactoryAsync(key);
+            var result = GetValueAsync(key, _defaultCacheCallOptions);
+            if (cleanupTask != null) await cleanupTask;
+            return await result;
+        }
+        
+        /// <summary> If value has been created it's returned immediately, otherwise the factory is called, all this in a non blocking way. </summary>
+        public async Task<TValue> GetValueAsync(TKey key, CacheCallOptions options)
+        {
+            Task cleanupTask = AutomaticCleanup ? CleanupAsync() : null;
+            var result = ActuallyGetValueOrCallFactoryAsync(key, options);
             if (cleanupTask != null) await cleanupTask;
             return await result;
         }
@@ -215,7 +237,7 @@ namespace AsyncLazy
             _isCleanupRunning = false;
         }
 
-        private TValue ActuallyGetValueOrCallFactory(TKey key)
+        private TValue ActuallyGetValueOrCallFactory(TKey key, CacheCallOptions options)
         {
             if (_coldBucket.TryGetValue(key, out var result))
             {
@@ -234,6 +256,13 @@ namespace AsyncLazy
                 }
                 else
                 {
+                    // treat cache call options
+                    options.CacheMissAction?.Invoke();
+                    if (options.DontCallFactory)
+                    {
+                        result = default(TValue);
+                        return;
+                    }
                     AsyncLazy<TValue> factoryCall = null;
                     if (Factory != null)
                     {
@@ -254,8 +283,8 @@ namespace AsyncLazy
             });
             return result;
         }
-
-        private async Task<TValue> ActuallyGetValueOrCallFactoryAsync(TKey key)
+        
+        private async Task<TValue> ActuallyGetValueOrCallFactoryAsync(TKey key, CacheCallOptions options)
         {
             if (_coldBucket.TryGetValue(key, out var result))
             {
@@ -274,6 +303,13 @@ namespace AsyncLazy
                 }
                 else
                 {
+                    // treat cache call options
+                    options.CacheMissAction?.Invoke();
+                    if (options.DontCallFactory)
+                    {
+                        result = default(TValue);
+                        return;
+                    }
                     AsyncLazy<TValue> factoryCall = null;
                     if (AsyncFactory != null)
                     {
