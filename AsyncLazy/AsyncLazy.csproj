@@ -7,9 +7,9 @@
     <Description>Lazy execution for your C# adventures! Contains classes like AsyncLazy, Once, AsyncCache and AsyncLock.</Description>
     <RepositoryUrl>https://github.com/peterekepeter/async-lazy</RepositoryUrl>
     <PackageReleaseNotes>AsyncCache now supports extedned options durin request, for executing a piece of code on cache miss, so that cache misses can be detected.</PackageReleaseNotes>
-    <Version>1.4.0</Version>
-    <AssemblyVersion>1.4.0.0</AssemblyVersion>
-    <FileVersion>1.4.0.0</FileVersion>
+    <Version>1.4.1</Version>
+    <AssemblyVersion>1.4.1.0</AssemblyVersion>
+    <FileVersion>1.4.1.0</FileVersion>
     <PackageTags>AsyncLazy AsyncLock Cache</PackageTags>
   </PropertyGroup>
 

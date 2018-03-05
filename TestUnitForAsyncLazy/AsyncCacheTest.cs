@@ -155,7 +155,7 @@ namespace TestUnitForAsyncLazy
         {
             var count = 0;
             var cache = new AsyncCache<int, int>(x => x * x);
-            var options = new CacheCallOptions
+            var options = new CacheCallOptions<int, int>()
             {
                 CacheMissAction = () =>
                 {
@@ -172,7 +172,7 @@ namespace TestUnitForAsyncLazy
         {
             var count = 0;
             var cache = new AsyncCache<int, int>(x => x * x);
-            var options = new CacheCallOptions
+            var options = new CacheCallOptions<int, int>
             {
                 CacheMissAction = () =>
                 {
@@ -188,13 +188,21 @@ namespace TestUnitForAsyncLazy
         public async Task CacheMissActionCanDenyFactoryCall()
         {
             var cache = new AsyncCache<int, int>(x => x * x);
-            var options = new CacheCallOptions();
+            var options = new CacheCallOptions<int, int>();
             options.CacheMissAction = () =>
             {
                 options.DontCallFactory = true;
             };
             cache.GetValue(3, options).Should().Be(0);
             (await cache.GetValueAsync(3, options)).Should().Be(0);
+        }
+
+        [TestMethod]
+        public async Task CanOverrideFactoryWhenGettingValue()
+        {
+            var cache = new AsyncCache<int, int>(x => x * x);
+            (await cache.GetValueAsync(3, x => x+x)).Should().Be(6);
+            cache.GetValue(3, x => x + x).Should().Be(6);
         }
     }
 }

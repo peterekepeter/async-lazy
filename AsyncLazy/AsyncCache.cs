@@ -31,7 +31,7 @@ namespace AsyncLazy
         private TimeSpan _purgeEvery = new TimeSpan(0, 5, 0);
         private Int32 _itemLimit = 1000;
         private Int32 _hotItemCount = 0;
-        private CacheCallOptions _defaultCacheCallOptions;
+        private CacheCallOptions<TKey, TValue> _defaultCacheCallOptions;
 
         /// <summary>
         /// You must set either Factory or AsyncFactory after initializing with default constructor before usage.
@@ -43,7 +43,7 @@ namespace AsyncLazy
             _warmBucket = _coldBucket = builder.ToImmutable();
             _lastOptimization = _lastPurge = DateTime.Now;
             _hotItemCount = 0;
-            _defaultCacheCallOptions = CacheCallOptions.GetDefaultOptions();
+            _defaultCacheCallOptions = CacheCallOptions<TKey, TValue>.GetDefaultOptions();
             _cleanupProcess = new Once(() =>
             {
                 var now = DateTime.Now;
@@ -117,9 +117,9 @@ namespace AsyncLazy
 
 
         /// <summary> The default cache call options, used in all requests that dont explicityle specify the options. Cannot be set to null, when attempting to set to null it will default to CacheCallOptions.GetDefaultOptions() </summary>
-        public CacheCallOptions DefaultCacheCallOptions
+        public CacheCallOptions<TKey, TValue> DefaultCacheCallOptions
         {
-            set => _defaultCacheCallOptions = value ?? CacheCallOptions.GetDefaultOptions();
+            set => _defaultCacheCallOptions = value ?? CacheCallOptions<TKey, TValue>.GetDefaultOptions();
             get => _defaultCacheCallOptions;
         }
 
@@ -133,7 +133,7 @@ namespace AsyncLazy
         }
 
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
-        public TValue GetValue(TKey key, CacheCallOptions options) 
+        public TValue GetValue(TKey key, CacheCallOptions<TKey, TValue> options) 
         {
             Task cleanupTask = AutomaticCleanup ? Task.Run(async () => await CleanupAsync()) : null;
             var result = ActuallyGetValueOrCallFactory(key, options);
@@ -151,7 +151,7 @@ namespace AsyncLazy
         }
         
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called, all this in a non blocking way. </summary>
-        public async Task<TValue> GetValueAsync(TKey key, CacheCallOptions options)
+        public async Task<TValue> GetValueAsync(TKey key, CacheCallOptions<TKey, TValue> options)
         {
             Task cleanupTask = AutomaticCleanup ? CleanupAsync() : null;
             var result = ActuallyGetValueOrCallFactoryAsync(key, options);
@@ -237,7 +237,7 @@ namespace AsyncLazy
             _isCleanupRunning = false;
         }
 
-        private TValue ActuallyGetValueOrCallFactory(TKey key, CacheCallOptions options)
+        private TValue ActuallyGetValueOrCallFactory(TKey key, CacheCallOptions<TKey, TValue> options)
         {
             if (_coldBucket.TryGetValue(key, out var result))
             {
@@ -263,14 +263,16 @@ namespace AsyncLazy
                         result = default(TValue);
                         return;
                     }
+                    var asyncFactory = options.AsyncFactory ?? AsyncFactory;
+                    var factory = options.Factory ?? Factory;
                     AsyncLazy<TValue> factoryCall = null;
                     if (Factory != null)
                     {
-                        factoryCall = new AsyncLazy<TValue>(() => Factory(key));
+                        factoryCall = new AsyncLazy<TValue>(() => factory(key));
                     }
                     else if (AsyncFactory != null)
                     {
-                        factoryCall = new AsyncLazy<TValue>(async () => await AsyncFactory(key));
+                        factoryCall = new AsyncLazy<TValue>(async () => await asyncFactory(key));
                     }
                     else
                     {
@@ -284,7 +286,7 @@ namespace AsyncLazy
             return result;
         }
         
-        private async Task<TValue> ActuallyGetValueOrCallFactoryAsync(TKey key, CacheCallOptions options)
+        private async Task<TValue> ActuallyGetValueOrCallFactoryAsync(TKey key, CacheCallOptions<TKey, TValue> options)
         {
             if (_coldBucket.TryGetValue(key, out var result))
             {
@@ -310,14 +312,16 @@ namespace AsyncLazy
                         result = default(TValue);
                         return;
                     }
+                    var asyncFactory = options.AsyncFactory ?? AsyncFactory;
+                    var factory = options.Factory ?? Factory;
                     AsyncLazy<TValue> factoryCall = null;
-                    if (AsyncFactory != null)
+                    if (asyncFactory != null)
                     {
-                        factoryCall = new AsyncLazy<TValue>(async () => await AsyncFactory(key));
+                        factoryCall = new AsyncLazy<TValue>(async () => await asyncFactory(key));
                     }
-                    else if (Factory != null)
+                    else if (factory != null)
                     {
-                        factoryCall = new AsyncLazy<TValue>(() => Factory(key));
+                        factoryCall = new AsyncLazy<TValue>(() => factory(key));
                     }
                     else
                     {
