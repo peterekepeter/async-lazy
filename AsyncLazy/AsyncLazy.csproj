@@ -7,9 +7,9 @@
     <Description>Lazy execution for your C# adventures! Contains classes like AsyncLazy, Once, AsyncCache and AsyncLock.</Description>
     <RepositoryUrl>https://github.com/peterekepeter/async-lazy</RepositoryUrl>
     <PackageReleaseNotes>AsyncCache supports filtering out cached values so that you don't store failed results. Now it also supports running factories in parallel. (previousely it had a bug)</PackageReleaseNotes>
-    <Version>1.5.1</Version>
-    <AssemblyVersion>1.5.1.0</AssemblyVersion>
-    <FileVersion>1.5.1.0</FileVersion>
+    <Version>1.5.2</Version>
+    <AssemblyVersion>1.5.2.0</AssemblyVersion>
+    <FileVersion>1.5.2.0</FileVersion>
     <PackageTags>AsyncLazy AsyncLock Cache</PackageTags>
   </PropertyGroup>
 

@@ -291,5 +291,15 @@ namespace TestUnitForAsyncLazy
             counter.Should().Be(10);
             exceptionCounter.Should().Be(10);
         }
+
+        [TestMethod]
+        public async Task CanProvideFactoryAtCallTime()
+        {
+            var cache = new AsyncCache<int, int>();
+            var result = cache.GetValue(3, x => x*x); ;
+            result.Should().Be(9);
+            var result2 = await cache.GetValueAsync(5, x => x + x); ;
+            result2.Should().Be(10);
+        }
     }
 }

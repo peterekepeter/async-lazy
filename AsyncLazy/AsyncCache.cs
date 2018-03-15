@@ -275,11 +275,11 @@ namespace AsyncLazy
                     }
                     var asyncFactory = options.AsyncFactory ?? AsyncFactory;
                     var factory = options.Factory ?? Factory;
-                    if (Factory != null)
+                    if (factory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(() => factory(key));
                     }
-                    else if (AsyncFactory != null)
+                    else if (asyncFactory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(async () => await asyncFactory(key));
                     }
@@ -336,11 +336,11 @@ namespace AsyncLazy
                     }
                     var asyncFactory = options.AsyncFactory ?? AsyncFactory;
                     var factory = options.Factory ?? Factory;
-                    if (AsyncFactory != null)
+                    if (asyncFactory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(async () => await asyncFactory(key));
                     }
-                    else if(Factory != null)
+                    else if(factory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(() => factory(key));
                     }
