@@ -21,6 +21,7 @@ namespace AsyncLazy
         private ImmutableDictionary<TKey, TValue> _coldBucket;
         private Func<TKey, TValue> _factory;
         private Func<TKey, Task<TValue>> _asyncFactory;
+        private Func<TValue, Boolean> _filter = null;
         private readonly AsyncLock _hotBucketLock = new AsyncLock();
         private readonly Once _cleanupProcess;
         private DateTime _lastPurge;
@@ -123,6 +124,13 @@ namespace AsyncLazy
             get => _defaultCacheCallOptions;
         }
 
+        /// <summary> Sets a value filter which is a function that should return true if you want to cache the value. </summary>
+        public Func<TValue, bool> Filter
+        {
+            get { return _filter; }
+            set { _filter = value; }
+        }
+
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
         public TValue GetValue(TKey key)
         {
@@ -208,7 +216,8 @@ namespace AsyncLazy
             {
                 foreach (var entry in oldHotBucket)
                 {
-                    builder.TryAdd(entry.Key, await entry.Value.GetValueAsync());
+                    var value = await entry.Value.GetValueAsync();
+                    if (_filter != null && _filter(value)) builder.TryAdd(entry.Key, value);
                 }
             }
             // populate with _warmBucket as well if optimize only
@@ -248,11 +257,12 @@ namespace AsyncLazy
                 return result;
             }
             // syncronize across threads
+            AsyncLazy<TValue> factoryCall = null;
             _hotBucketLock.Run(() =>
             {
                 if (_hotBucket.TryGetValue(key, out var lazyResult))
                 {
-                    result = lazyResult.GetValue();
+                    factoryCall = lazyResult;
                 }
                 else
                 {
@@ -265,7 +275,6 @@ namespace AsyncLazy
                     }
                     var asyncFactory = options.AsyncFactory ?? AsyncFactory;
                     var factory = options.Factory ?? Factory;
-                    AsyncLazy<TValue> factoryCall = null;
                     if (Factory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(() => factory(key));
@@ -280,9 +289,21 @@ namespace AsyncLazy
                     }
                     _hotBucket.Add(key, factoryCall);
                     _hotItemCount = _hotBucket.Count;
-                    result = factoryCall.GetValue();
                 }
             });
+            
+            // retrieve result while not locking the hot bucket
+            if (factoryCall != null) result = factoryCall.GetValue();
+
+            if (Filter != null && !Filter(result))
+            {
+                // remove item from bucket as it is filtered out by the filtering function
+                _hotBucketLock.Run(() =>
+                {
+                    _hotBucket.Remove(key);
+                    _hotItemCount = _hotBucket.Count;
+                });
+            }
             return result;
         }
         
@@ -297,11 +318,12 @@ namespace AsyncLazy
                 return result;
             }
             // syncronize across threads
-            await _hotBucketLock.RunAsync(async () =>
+            AsyncLazy<TValue> factoryCall = null;
+            _hotBucketLock.Run(() =>
             {
                 if (_hotBucket.TryGetValue(key, out var lazyResult))
                 {
-                    result = lazyResult.GetValue();
+                    factoryCall = lazyResult;
                 }
                 else
                 {
@@ -314,12 +336,11 @@ namespace AsyncLazy
                     }
                     var asyncFactory = options.AsyncFactory ?? AsyncFactory;
                     var factory = options.Factory ?? Factory;
-                    AsyncLazy<TValue> factoryCall = null;
-                    if (asyncFactory != null)
+                    if (AsyncFactory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(async () => await asyncFactory(key));
                     }
-                    else if (factory != null)
+                    else if(Factory != null)
                     {
                         factoryCall = new AsyncLazy<TValue>(() => factory(key));
                     }
@@ -329,9 +350,21 @@ namespace AsyncLazy
                     }
                     _hotBucket.Add(key, factoryCall);
                     _hotItemCount = _hotBucket.Count;
-                    result = await factoryCall.GetValueAsync();
                 }
             });
+
+            // retrieve result while not locking the hot bucket
+            if (factoryCall != null) result = await factoryCall.GetValueAsync();
+
+            if (Filter != null && !Filter(result))
+            {
+                // remove item from bucket as it is filtered out by the filtering function
+                _hotBucketLock.Run(() =>
+                {
+                    _hotBucket.Remove(key);
+                    _hotItemCount = _hotBucket.Count;
+                });
+            }
             return result;
         }
     }

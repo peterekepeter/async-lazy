@@ -204,5 +204,92 @@ namespace TestUnitForAsyncLazy
             (await cache.GetValueAsync(3, x => x+x)).Should().Be(6);
             cache.GetValue(3, x => x + x).Should().Be(6);
         }
+
+        [TestMethod]
+        public async Task CanFilterValues()
+        {
+            var counter = 0;
+            var cache = new AsyncCache<int, int>(x =>
+            {
+                counter++;
+                return x * x;
+            });
+            cache.Filter =  x => x != 0; // only cache non zero results
+            cache.GetValue(1);
+            cache.GetValue(1);
+            counter.Should().Be(1);
+            cache.GetValue(0);
+            cache.GetValue(0);
+            counter.Should().Be(3);
+            await cache.GetValueAsync(1);
+            await cache.GetValueAsync(1);
+            counter.Should().Be(3);
+            await cache.GetValueAsync(0);
+            await cache.GetValueAsync(0);
+            counter.Should().Be(5);
+        }
+
+        
+        [TestMethod]
+        public async Task RunsFactoriesInParallel()
+        {
+            var counter = 0;
+            var values = new bool[3];
+            var cache = new AsyncCache<int, int>(async x =>
+            {
+                Interlocked.Increment(ref counter);
+                await Task.Delay(100); // simulate long job
+                values[counter] = true;
+                Interlocked.Decrement(ref counter);
+                return x * x;
+            });
+            await Task.WhenAll(cache.GetValueAsync(3), cache.GetValueAsync(4));
+            values[1].Should().Be(true);
+            values[2].Should().Be(true);
+        }
+
+        [TestMethod]
+        public async Task CacheGetValueIsReentrant()
+        {
+            var cache = new AsyncCache<int, int>();
+            cache.AsyncFactory = async x =>
+            {
+                if (x == 3)
+                {
+                    return await cache.GetValueAsync(4);
+                }
+                else return x;
+            };
+
+            var cacheTask = cache.GetValueAsync(3);
+            (await Task.WhenAny(cacheTask, Task.Delay(500))).Should().Be(cacheTask);
+        }
+
+        [TestMethod]
+        public async Task FactoryExceptionWillDiscardValueAndRethrow()
+        {
+            var counter = 0;
+            var exceptionCounter = 0;
+            var cache = new AsyncCache<int, int>();
+            cache.AsyncFactory = async x =>
+            {
+                counter++;
+                throw new InvalidOperationException("nope");
+            };
+            
+            for (int i=0; i<10; i++)
+            {
+                try
+                {
+                    var cacheTask = await cache.GetValueAsync(3);
+                }
+                catch (InvalidOperationException)
+                {
+                    exceptionCounter++;
+                }
+            }
+            counter.Should().Be(10);
+            exceptionCounter.Should().Be(10);
+        }
     }
 }
