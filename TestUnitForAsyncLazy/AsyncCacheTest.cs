@@ -301,5 +301,33 @@ namespace TestUnitForAsyncLazy
             var result2 = await cache.GetValueAsync(5, x => x + x); ;
             result2.Should().Be(10);
         }
+
+        [TestMethod]
+        public async Task RunTimeOfFactoriesIsNotSumOfAllRuntimes()
+        {
+            var cache = new AsyncCache<int, int>(async x =>
+            {
+                await Task.Delay(100); // simulate long job
+                return x * x;
+            });
+
+            var stopwatch = Stopwatch.StartNew();
+            var tasks = new List<Task<int>>(100);
+            for (int i=0; i<100; i++)
+            {
+                tasks.Add(cache.GetValueAsync(i));
+            }
+            await Task.WhenAll(tasks);
+            // 100 tasks that take 100ms should run under 
+            stopwatch.Stop();
+            Console.WriteLine($"Measured runtime is {stopwatch.ElapsedMilliseconds}ms");
+            stopwatch.ElapsedMilliseconds.Should().BeLessThan(300);
+            // check for correct results.
+            for (int i=0; i<100; i++)
+            {
+                var result = await tasks[i];
+                result.Should().Be(i * i);
+            }
+        }
     }
 }
