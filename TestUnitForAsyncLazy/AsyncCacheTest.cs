@@ -329,5 +329,57 @@ namespace TestUnitForAsyncLazy
                 result.Should().Be(i * i);
             }
         }
+
+        [TestMethod]
+        public async Task DoesNotDeadlockOnAsyncApi()
+        {
+
+            var cache = new AsyncCache<int, int>
+            {
+                AutomaticCleanup = true,
+                ItemLimit = 200, // make sure we hit this as well
+                DefaultCacheCallOptions = new CacheCallOptions<int, int>
+                {
+                    // this option causes the cache to dispatch much more slowly
+                    // !and is essentiall for this test!
+                    CacheMissAction = () => Thread.Sleep(100), 
+                    AsyncFactory = async x =>
+                    {
+                    // schedule a bunch of stuff
+                    await Task.WhenAll(
+                            Task.Run(() => Task.Delay(1000)),
+                            Task.Run(() => Task.Delay(1000)),
+                            Task.Run(() => Task.Delay(1000)),
+                            Task.Run(() => Task.Delay(1000)));
+                        return x * x;
+                    }
+                }
+            };
+
+
+            var clients = 100;
+            var syncronizedStart = new SemaphoreSlim(0);
+            Console.WriteLine($"Preparing {clients} clients...");
+            var threads = Enumerable.Range(0, clients).Select(id => new Thread(() =>
+            {
+                syncronizedStart.Wait();
+                var value = cache.GetValueAsync(id).Result;
+            })).ToList();
+            foreach(var thread in threads) thread.Start();
+            Console.WriteLine($"Starting in 1 sec...");
+            await Task.Delay(1000);
+            Console.WriteLine($"Starting...");
+            syncronizedStart.Release(clients);
+            foreach (var thread in threads)
+            {
+                // if thread doesnt finish in 10 seconds, it's pretty much deadlocked
+                if (thread.Join(20000) == false)
+                {
+                    // to debug put breakpoint here, and look at what the threads are doing
+                    Assert.Fail();
+                }
+            }
+            Console.WriteLine($"Done!");
+        }
     }
 }

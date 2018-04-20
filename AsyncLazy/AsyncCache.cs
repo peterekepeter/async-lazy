@@ -130,7 +130,7 @@ namespace AsyncLazy
             get { return _filter; }
             set { _filter = value; }
         }
-
+        
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
         public TValue GetValue(TKey key)
         {
@@ -319,7 +319,7 @@ namespace AsyncLazy
             }
             // syncronize across threads
             AsyncLazy<TValue> factoryCall = null;
-            _hotBucketLock.Run(() =>
+            await _hotBucketLock.RunAsync(() =>
             {
                 if (_hotBucket.TryGetValue(key, out var lazyResult))
                 {
@@ -359,7 +359,7 @@ namespace AsyncLazy
             if (Filter != null && !Filter(result))
             {
                 // remove item from bucket as it is filtered out by the filtering function
-                _hotBucketLock.Run(() =>
+                await _hotBucketLock.RunAsync(() =>
                 {
                     _hotBucket.Remove(key);
                     _hotItemCount = _hotBucket.Count;
