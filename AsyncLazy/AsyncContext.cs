@@ -11,7 +11,7 @@ namespace AsyncLazy
     using System.Threading;
     using System.Threading.Tasks;
 
-    namespace AegirWeb.KeyVault
+    namespace AsyncLazy
     {
         /// <summary>
         /// Allows running code in an isolated async context with it's own threads istead of using up threadpool threads.

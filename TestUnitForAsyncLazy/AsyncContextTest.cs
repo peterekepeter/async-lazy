@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using AsyncLazy.AegirWeb.KeyVault;
+using AsyncLazy.AsyncLazy;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
