@@ -16,9 +16,41 @@ namespace AsyncLazy
         /// <summary>
         /// Allows running code in an isolated async context with it's own threads istead of using up threadpool threads.
         /// </summary>
-        public class AsyncContext
+        public class AsyncContext : IDisposable
         {
+            /// <summary>
+            /// Creates some dedicated threads to run submitted tasks with.
+            /// </summary>
+            /// <param name="threadCount">The number of dedicated threads to create.</param>
+            /// <param name="borrowsCallerThread">The thread which is submitted is borrowed to execute other tasks until the submitted work is done.</param>
+            /// <param name="startOnCallerThread">Will start running the submitted work on the thread which submitted it.</param>
+            /// <param name="threadName">The name of the dedicated threads, can be used for debug/identification purposes.</param>
+            public AsyncContext(
+                int threadCount = 4,
+                bool borrowsCallerThread = true,
+                string threadName = "AsyncContextThread")
+            {
+                this._borrowsCallerThread = borrowsCallerThread;
+                workSignal = threadCount == 0 ? null : new SemaphoreSlim(0);
+                synchronizationContext = new AsyncContextSynchronizationContext(workSignal, workItems);
+                threads = new Thread[threadCount];
+                for (int i = 0; i < threadCount; i++)
+                {
+                    var thread = threads[i] = new Thread(ThreadMethod);
+                    thread.Name = threadName;
+                    thread.Start();
+                }
+            }
 
+            private void ThreadMethod()
+            {
+                SynchronizationContext.SetSynchronizationContext(synchronizationContext);
+                while (running)
+                {
+                    workSignal.Wait();
+                    DoSomeWork();
+                }
+            }
 
             private class WorkItem  
             {
@@ -33,6 +65,14 @@ namespace AsyncLazy
             }
 
             ConcurrentQueue<WorkItem> workItems = new ConcurrentQueue<WorkItem>();
+
+            void DoSomeWork()
+            {
+                if (workItems.TryDequeue(out var item))
+                {
+                    item.callback(item.state);
+                }
+            }
 
             private class AsyncContextSynchronizationContext : SynchronizationContext
             {
@@ -73,7 +113,7 @@ namespace AsyncLazy
                 public override void Post(SendOrPostCallback d, object state)
                 {
                     workItems.Enqueue(new WorkItem(d, state));
-                    workSignal.Release(1);
+                    workSignal?.Release(1);
                 }
 
                 public override void Send(SendOrPostCallback d, object state)
@@ -100,29 +140,11 @@ namespace AsyncLazy
             
             private Thread[] threads;
             private AsyncContextSynchronizationContext synchronizationContext;
-            private static SemaphoreSlim workSignal;
+            private SemaphoreSlim workSignal;
+            private Boolean running = true;
+            private bool _borrowsCallerThread;
+            private bool _startOnCallerThread;
 
-            public AsyncContext(int dedicatedThreadCount = 4)
-            {
-                workSignal = new SemaphoreSlim(0);
-                synchronizationContext = new AsyncContextSynchronizationContext(workSignal, workItems);
-                threads = new Thread[dedicatedThreadCount];
-                for (int i = 0; i < dedicatedThreadCount; i++)
-                {
-                    threads[i] = new Thread(() =>
-                    {
-                        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
-                        while (true)
-                        {
-                            workSignal.Wait();
-                            if (workItems.TryDequeue(out var item))
-                            {
-                                item.callback(item.state);
-                            }
-                        }
-                    });
-                }
-            }
 
             public void Run(Action action)
             {
@@ -130,7 +152,38 @@ namespace AsyncLazy
                 SynchronizationContext.SetSynchronizationContext(synchronizationContext);
                 try
                 {
-                    action();
+                    if (_borrowsCallerThread)
+                    {
+                        Exception capturedException = null;
+                        bool done = false;
+                        synchronizationContext.Post(_ =>
+                        {
+                            try
+                            {
+                                action();
+                            }
+                            catch (Exception exception)
+                            {
+                                capturedException = exception;
+                            }
+                            finally
+                            {
+                                done = true;
+                            }
+                        }, null);
+                        while (done == false && _borrowsCallerThread)
+                        {
+                            DoSomeWork();
+                        }
+                        if (capturedException != null)
+                        {
+                            throw capturedException;
+                        }
+                    }
+                    else
+                    {
+                        action();
+                    }
                 }
                 finally
                 {
@@ -144,7 +197,40 @@ namespace AsyncLazy
                 SynchronizationContext.SetSynchronizationContext(synchronizationContext);
                 try
                 {
-                    return action();
+                    if (_borrowsCallerThread)
+                    {
+                        TResult result = default(TResult);
+                        Exception capturedException = null;
+                        bool done = false;
+                        synchronizationContext.Post(_ =>
+                        {
+                            try
+                            {
+                                result = action();
+                            }
+                            catch (Exception exception)
+                            {
+                                capturedException = exception;
+                            }
+                            finally
+                            {
+                                done = true;
+                            }
+                        }, null);
+                        while (done == false && _borrowsCallerThread)
+                        {
+                            DoSomeWork();
+                        }
+                        if (capturedException != null)
+                        {
+                            throw capturedException;
+                        }
+                        return result;
+                    }
+                    else
+                    {
+                        return action();
+                    }
                 }
                 finally
                 {
@@ -158,7 +244,11 @@ namespace AsyncLazy
                 SynchronizationContext.SetSynchronizationContext(synchronizationContext);
                 try
                 {
-                    var task = action();
+                    Task task = action();
+                    while (_borrowsCallerThread && task.IsCompleted == false)
+                    {
+                        DoSomeWork();
+                    }
                     task.Wait();
                 }
                 finally
@@ -173,12 +263,38 @@ namespace AsyncLazy
                 SynchronizationContext.SetSynchronizationContext(synchronizationContext);
                 try
                 {
-                    var task = action();
+                    Task<TResult> task = action();
+                    while (_borrowsCallerThread && task.IsCompleted == false)
+                    {
+                        DoSomeWork();
+                    }
                     return task.Result;
                 }
                 finally
                 {
                     SynchronizationContext.SetSynchronizationContext(captured);
+                }
+            }
+
+            public void Finalzie()
+            {
+                Dispose();
+            }
+
+            public void Dispose()
+            {
+                if (running)
+                {
+                    running = false;
+                    if (threads.Length != 0)
+                    {
+                        workSignal.Release(threads.Length);
+                        foreach (var thread in threads)
+                        {
+                            thread.Join(100);
+                        }
+                        workSignal.Dispose();
+                    }
                 }
             }
         }

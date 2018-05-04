@@ -58,7 +58,7 @@ namespace AsyncLazy
                 {
                     // yes this blocks the thread, you called the sync version
                     // but it does it on a background thread
-                    _value = Task.Run(async () => await _asyncFactory()).Result;
+                    _value = _asyncFactory().Result;
                     // destroy fields that are not needed anymore
                     _asyncFactory = null;
                 }

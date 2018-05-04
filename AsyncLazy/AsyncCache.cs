@@ -134,7 +134,7 @@ namespace AsyncLazy
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
         public TValue GetValue(TKey key)
         {
-            Task cleanupTask = AutomaticCleanup ? Task.Run(async () => await CleanupAsync()) : null;
+            Task cleanupTask = AutomaticCleanup ? CleanupAsync() : null;
             var result = ActuallyGetValueOrCallFactory(key, _defaultCacheCallOptions);
             cleanupTask?.Wait();
             return result;
@@ -143,7 +143,7 @@ namespace AsyncLazy
         /// <summary> If value has been created it's returned immediately, otherwise the factory is called. </summary>
         public TValue GetValue(TKey key, CacheCallOptions<TKey, TValue> options) 
         {
-            Task cleanupTask = AutomaticCleanup ? Task.Run(async () => await CleanupAsync()) : null;
+            Task cleanupTask = AutomaticCleanup ? CleanupAsync() : null;
             var result = ActuallyGetValueOrCallFactory(key, options);
             cleanupTask?.Wait();
             return result;
