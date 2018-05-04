@@ -61,10 +61,7 @@ namespace AsyncLazy
                 {
                     // yes this blocks the thread, you called the sync version
                     // but it does it on a background thread
-                    Task.Run(async () =>
-                    {
-                        await _asyncAction();
-                    }).Wait();
+                    _asyncAction().Wait();
                 }
                 _ranCount++;
             });

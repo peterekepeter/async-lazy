@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AsyncLazy;
+using AsyncLazy.AegirWeb.KeyVault;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -238,6 +239,7 @@ namespace TestUnitForAsyncLazy
             var cache = new AsyncCache<int, int>(async x =>
             {
                 Interlocked.Increment(ref counter);
+                values[counter] = true;
                 await Task.Delay(100); // simulate long job
                 values[counter] = true;
                 Interlocked.Decrement(ref counter);
@@ -331,55 +333,60 @@ namespace TestUnitForAsyncLazy
         }
 
         [TestMethod]
-        public async Task DoesNotDeadlockOnAsyncApi()
+        public void DoesNotDeadlockOnAsyncApi()
         {
-
-            var cache = new AsyncCache<int, int>
+            using (var context = new AsyncContext(threadCount: 0, borrowsCallerThread: true))
             {
-                AutomaticCleanup = true,
-                ItemLimit = 200, // make sure we hit this as well
-                DefaultCacheCallOptions = new CacheCallOptions<int, int>
+                context.Run(async () =>
                 {
-                    // this option causes the cache to dispatch much more slowly
-                    // !and is essentiall for this test!
-                    CacheMissAction = () => Thread.Sleep(100), 
-                    AsyncFactory = async x =>
+                    var cache = new AsyncCache<int, int>
                     {
-                    // schedule a bunch of stuff
-                    await Task.WhenAll(
-                            Task.Run(() => Task.Delay(1000)),
-                            Task.Run(() => Task.Delay(1000)),
-                            Task.Run(() => Task.Delay(1000)),
-                            Task.Run(() => Task.Delay(1000)));
-                        return x * x;
+                        AutomaticCleanup = true,
+                        ItemLimit = 200, // make sure we hit this as well
+                        DefaultCacheCallOptions = new CacheCallOptions<int, int>
+                        {
+                            // this option causes the cache to dispatch much more slowly
+                            // !and is essentiall for this test!
+                            CacheMissAction = () => Thread.Sleep(100),
+                            AsyncFactory = async x =>
+                            {
+                                // schedule a bunch of stuff
+                                await Task.WhenAll(
+                                        Task.Run(() => Task.Delay(100)),
+                                        Task.Run(() => Task.Delay(100)),
+                                        Task.Run(() => Task.Delay(100)),
+                                        Task.Run(() => Task.Delay(100)));
+                                return x * x;
+                            }
+                        }
+                    };
+
+
+                    var clients = 10;
+                    var syncronizedStart = new SemaphoreSlim(0);
+                    Console.WriteLine($"Preparing {clients} clients...");
+                    var threads = Enumerable.Range(0, clients).Select(id => new Thread(() =>
+                    {
+                        syncronizedStart.Wait();
+                        var value = cache.GetValueAsync(id).Result;
+                    })).ToList();
+                    foreach (var thread in threads) thread.Start();
+                    Console.WriteLine($"Starting in 1 sec...");
+                    await Task.Delay(1000);
+                    Console.WriteLine($"Starting...");
+                    syncronizedStart.Release(clients);
+                    foreach (var thread in threads)
+                    {
+                        // if thread doesnt finish in 10 seconds, it's pretty much deadlocked
+                        if (thread.Join(2000) == false)
+                        {
+                            // to debug put breakpoint here, and look at what the threads are doing
+                            Assert.Fail();
+                        }
                     }
-                }
-            };
-
-
-            var clients = 100;
-            var syncronizedStart = new SemaphoreSlim(0);
-            Console.WriteLine($"Preparing {clients} clients...");
-            var threads = Enumerable.Range(0, clients).Select(id => new Thread(() =>
-            {
-                syncronizedStart.Wait();
-                var value = cache.GetValueAsync(id).Result;
-            })).ToList();
-            foreach(var thread in threads) thread.Start();
-            Console.WriteLine($"Starting in 1 sec...");
-            await Task.Delay(1000);
-            Console.WriteLine($"Starting...");
-            syncronizedStart.Release(clients);
-            foreach (var thread in threads)
-            {
-                // if thread doesnt finish in 10 seconds, it's pretty much deadlocked
-                if (thread.Join(20000) == false)
-                {
-                    // to debug put breakpoint here, and look at what the threads are doing
-                    Assert.Fail();
-                }
+                    Console.WriteLine($"Done!");
+                });
             }
-            Console.WriteLine($"Done!");
         }
     }
 }

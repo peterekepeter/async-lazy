@@ -40,7 +40,7 @@ namespace AsyncLazy
             _semaphoreSlim.Wait();
             try
             {
-                Task.Run(action).Wait();
+                action().Wait();
             }
             finally
             {
@@ -56,7 +56,7 @@ namespace AsyncLazy
             await _semaphoreSlim.WaitAsync();
             try
             {
-                await Task.Run(action);
+                action();
             }
             finally
             {
